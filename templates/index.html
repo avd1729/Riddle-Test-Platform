@@ -1,0 +1,55 @@
+{% extends 'base.html' %} {% block content %}
+<div class="row justify-content-center">
+  <div class="col-md-8">
+    <div class="card">
+      <div class="card-header bg-primary text-white">
+        <h3 class="card-title mb-0">Welcome to the Riddle Test Platform</h3>
+      </div>
+      <div class="card-body">
+        <p class="lead">
+          Test your problem-solving skills with challenging riddles!
+        </p>
+
+        <h4>How It Works:</h4>
+        <ul>
+          <li>Each riddle is worth 10 points</li>
+          <li>You can use hints if you get stuck:</li>
+          <ul>
+            <li>First hint: -2 points</li>
+            <li>Second hint: -3 points</li>
+            <li>Third hint: -4 points</li>
+          </ul>
+          <li>
+            If you use all hints, you'll receive 1 point for a correct answer
+          </li>
+          <li>Answer as many riddles as you can to maximize your score</li>
+        </ul>
+
+        <h4>Rules:</h4>
+        <ul>
+          <li>Do not switch tabs or browsers during the test</li>
+          <li>Do not use search engines or external help</li>
+          <li>All answers should be lowercase and without punctuation</li>
+        </ul>
+
+        {% if not session.get('user_id') %}
+        <div class="mt-4 d-flex justify-content-center">
+          <a href="{{ url_for('register') }}" class="btn btn-primary me-3"
+            >Register</a
+          >
+          <a href="{{ url_for('login') }}" class="btn btn-outline-primary"
+            >Login</a
+          >
+        </div>
+        {% else %}
+        <div class="mt-4 d-flex justify-content-center">
+          <a href="{{ url_for('test') }}" class="btn btn-success"
+            >Start the Test</a
+          >
+        </div>
+        {% endif %}
+      </div>
+    </div>
+  </div>
+</div>
+{% endblock %}

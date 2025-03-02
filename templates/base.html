@@ -1,0 +1,156 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Riddle Test Platform</title>
+    <link
+      href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0-alpha1/dist/css/bootstrap.min.css"
+      rel="stylesheet"
+    />
+    <style>
+      body {
+        font-family: "Arial", sans-serif;
+        background-color: #f5f5f5;
+        padding-bottom: 50px;
+      }
+      .navbar {
+        background-color: #343a40;
+        margin-bottom: 30px;
+      }
+      .card {
+        margin-bottom: 20px;
+        box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);
+      }
+      .hint-btn {
+        margin-right: 10px;
+      }
+      .riddle-card .card-body {
+        min-height: 200px;
+      }
+      .hint-box {
+        background-color: #f8f9fa;
+        border-left: 4px solid #ffc107;
+        padding: 10px 15px;
+        margin: 10px 0;
+      }
+      .results-table th,
+      .results-table td {
+        vertical-align: middle;
+      }
+      .tab-change-warning {
+        display: none;
+        position: fixed;
+        top: 0;
+        left: 0;
+        width: 100%;
+        background-color: rgba(220, 53, 69, 0.95);
+        color: white;
+        padding: 20px;
+        text-align: center;
+        z-index: 9999;
+        font-size: 18px;
+        font-weight: bold;
+      }
+    </style>
+  </head>
+  <body>
+    <div class="tab-change-warning" id="tabWarning">
+      WARNING: Tab switching detected! This incident has been recorded.
+    </div>
+
+    <nav class="navbar navbar-expand-lg navbar-dark">
+      <div class="container">
+        <a class="navbar-brand" href="/">Riddle Test Platform</a>
+        <button
+          class="navbar-toggler"
+          type="button"
+          data-bs-toggle="collapse"
+          data-bs-target="#navbarNav"
+        >
+          <span class="navbar-toggler-icon"></span>
+        </button>
+        <div class="collapse navbar-collapse" id="navbarNav">
+          <ul class="navbar-nav ms-auto">
+            {% if session.get('user_id') %} {% if session.get('is_admin') %}
+            <li class="nav-item">
+              <a class="nav-link" href="{{ url_for('admin_dashboard') }}"
+                >Admin Dashboard</a
+              >
+            </li>
+            {% else %}
+            <li class="nav-item">
+              <a class="nav-link" href="{{ url_for('test') }}">Test</a>
+            </li>
+            <li class="nav-item">
+              <a class="nav-link" href="{{ url_for('results') }}">Results</a>
+            </li>
+            {% endif %}
+            <li class="nav-item">
+              <a class="nav-link" href="{{ url_for('logout') }}"
+                >Logout ({{ session.get('username') }})</a
+              >
+            </li>
+            {% else %}
+            <li class="nav-item">
+              <a class="nav-link" href="{{ url_for('login') }}">Login</a>
+            </li>
+            <li class="nav-item">
+              <a class="nav-link" href="{{ url_for('register') }}">Register</a>
+            </li>
+            {% endif %}
+          </ul>
+        </div>
+      </div>
+    </nav>
+
+    <div class="container">
+      {% with messages = get_flashed_messages() %} {% if messages %} {% for
+      message in messages %}
+      <div class="alert alert-info alert-dismissible fade show">
+        {{ message }}
+        <button
+          type="button"
+          class="btn-close"
+          data-bs-dismiss="alert"
+        ></button>
+      </div>
+      {% endfor %} {% endif %} {% endwith %} {% block content %}{% endblock %}
+    </div>
+
+    <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0-alpha1/dist/js/bootstrap.bundle.min.js"></script>
+    <script>
+      // Tab visibility detection
+      let hiddenTime = 0;
+      let warningCount = 0;
+
+      document.addEventListener("visibilitychange", function () {
+        if (document.hidden) {
+          hiddenTime = Date.now();
+        } else {
+          // Only check if tab was hidden for more than 1 second (to avoid false positives)
+          if (hiddenTime > 0 && Date.now() - hiddenTime > 1000) {
+            warningCount++;
+
+            // Show warning
+            const warning = document.getElementById("tabWarning");
+            warning.style.display = "block";
+            warning.textContent = `WARNING: Tab switching detected! This is warning #${warningCount}. Your activity is being recorded.`;
+
+            // Record the incident (you could send to server)
+            console.log(
+              "Tab switching detected at " + new Date().toISOString()
+            );
+
+            // Hide warning after 5 seconds
+            setTimeout(function () {
+              warning.style.display = "none";
+            }, 5000);
+          }
+          hiddenTime = 0;
+        }
+      });
+    </script>
+    {% block scripts %}{% endblock %}
+  </body>
+</html>
