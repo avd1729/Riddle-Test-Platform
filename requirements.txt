@@ -4,3 +4,4 @@ Werkzeug
 sqlite3
 datetime
 secrets
+gunicorn
