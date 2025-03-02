@@ -1,7 +1,2 @@
 Flask
-Jinja2
-Werkzeug
-sqlite3
-datetime
-secrets
 gunicorn
