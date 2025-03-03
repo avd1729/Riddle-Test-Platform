@@ -14,6 +14,23 @@ app.secret_key = secrets.token_hex(16)
 app.config['UPLOAD_FOLDER'] = 'static/uploads'
 os.makedirs(app.config['UPLOAD_FOLDER'], exist_ok=True)
 
+
+def init_db():
+    conn = sqlite3.connect('riddle_test.db')
+    c = conn.cursor()
+    
+    # Check if the column exists, if not add it
+    c.execute("PRAGMA table_info(users)")
+    columns = [column[1] for column in c.fetchall()]
+    
+    if "test_completed" not in columns:
+        c.execute("ALTER TABLE users ADD COLUMN test_completed INTEGER DEFAULT 0;")
+        conn.commit()
+        print("Added 'test_completed' column to users table.")
+    
+    conn.close()
+    return "Database updated with test_completed column"
+
 def add_image_column():
     conn = sqlite3.connect('riddle_test.db')
     c = conn.cursor()
@@ -31,7 +48,7 @@ def add_image_column():
 
 # Run this once to update the database schema
 add_image_column()
-
+init_db()
 
 # Database initialization
 def init_db():
@@ -224,9 +241,40 @@ def logout():
     session.clear()
     return redirect(url_for('index'))
 
-# Also modify the test route to check if the user has been flagged for cheating
+# Add this function to check if user has completed the test
+def has_completed_test(user_id):
+    conn = sqlite3.connect('riddle_test.db')
+    c = conn.cursor()
+    
+    # Check if all riddles are completed or if test is marked as complete
+    c.execute('''
+        SELECT 
+            (SELECT COUNT(*) FROM riddles) AS total_riddles,
+            (SELECT COUNT(*) FROM user_progress WHERE user_id = ? AND completed = 1) AS completed_riddles,
+            (SELECT COUNT(*) FROM users WHERE id = ? AND test_completed = 1) AS test_marked_complete
+    ''', (user_id, user_id))
+    
+    result = c.fetchone()
+    conn.close()
+    
+    total_riddles, completed_riddles, test_marked_complete = result
+    
+    # User has completed test if either all riddles are completed or test_completed flag is set
+    return completed_riddles == total_riddles or test_marked_complete > 0
+
+
+# Modify the test route to check if the user has completed the test
 @app.route('/test')
 def test():
+    if 'user_id' not in session:
+        flash('Please log in to take the test.')
+        return redirect(url_for('login'))
+        
+    # Check if user has already completed the test
+    if has_completed_test(session['user_id']):
+        flash('You have already completed this test. You cannot take it again.')
+        return redirect(url_for('results'))
+        
     # This will now be the redirect to the first page (without images)
     return redirect(url_for('test_without_images'))
 
@@ -236,6 +284,11 @@ def test_without_images():
         flash('Please log in to take the test.') 
         return redirect(url_for('login')) 
      
+    # Check if user has already completed the test
+    if has_completed_test(session['user_id']):
+        flash('You have already completed this test. You cannot take it again.')
+        return redirect(url_for('results'))
+    
     conn = sqlite3.connect('riddle_test.db') 
     c = conn.cursor() 
      
@@ -286,6 +339,11 @@ def test_with_images():
     if 'user_id' not in session: 
         flash('Please log in to take the test.') 
         return redirect(url_for('login')) 
+    
+    # Check if user has already completed the test
+    if has_completed_test(session['user_id']):
+        flash('You have already completed this test. You cannot take it again.')
+        return redirect(url_for('results'))
      
     conn = sqlite3.connect('riddle_test.db') 
     c = conn.cursor() 
@@ -331,6 +389,7 @@ def test_with_images():
         }) 
      
     return render_template('test_images.html', riddles_with_images=riddles_with_images)
+
 
 @app.route('/get_hint/<int:riddle_id>/<int:hint_num>', methods=['POST'])
 def get_hint(riddle_id, hint_num):
@@ -438,6 +497,7 @@ def submit_answer(riddle_id):
             'correct': False
         })
 
+# Modify the results route to mark the test as completed when viewed
 @app.route('/results')
 def results():
     if 'user_id' not in session:
@@ -446,6 +506,10 @@ def results():
     
     conn = sqlite3.connect('riddle_test.db')
     c = conn.cursor()
+    
+    # Mark the test as completed for this user
+    c.execute("UPDATE users SET test_completed = 1 WHERE id = ?", (session['user_id'],))
+    conn.commit()
     
     # Get user's results
     c.execute('''
@@ -503,8 +567,37 @@ def results():
                            results=results, 
                            total_score=total_score, 
                            max_possible=max_possible,
-                           percentage_score=percentage_score,)
-                        #    any_flagged=any_flagged)
+                           percentage_score=percentage_score,
+                           any_flagged=any_flagged,
+                           test_completed=True)
+
+# Add a route to check if all riddles are completed and redirect to results if so
+@app.route('/check_test_completion')
+def check_test_completion():
+    if 'user_id' not in session:
+        return jsonify({'error': 'Not logged in'}), 401
+    
+    conn = sqlite3.connect('riddle_test.db')
+    c = conn.cursor()
+    
+    # Check if all riddles are completed
+    c.execute('''
+        SELECT 
+            (SELECT COUNT(*) FROM riddles) AS total_riddles,
+            (SELECT COUNT(*) FROM user_progress WHERE user_id = ? AND completed = 1) AS completed_riddles
+    ''', (session['user_id'],))
+    
+    total_riddles, completed_riddles = c.fetchone()
+    
+    # If all riddles are completed, mark test as completed
+    if total_riddles == completed_riddles:
+        c.execute("UPDATE users SET test_completed = 1 WHERE id = ?", (session['user_id'],))
+        conn.commit()
+        conn.close()
+        return jsonify({'completed': True, 'redirect': url_for('results')})
+    
+    conn.close()
+    return jsonify({'completed': False})
 
 @app.route('/admin_dashboard')
 def admin_dashboard():
@@ -706,46 +799,30 @@ def user_detail(user_id):
                            total_score=total_score, 
                            max_possible=max_possible,
                            percentage_score=percentage_score)
-
-# Add this endpoint to app.py
+# Add a route to handle tab switching cheating attempts
 @app.route('/record_cheating_attempt', methods=['POST'])
 def record_cheating_attempt():
     if 'user_id' not in session:
         return jsonify({'error': 'Not logged in'}), 401
     
-    data = request.json
-    tab_switches = data.get('tab_switches', 0)
-    
     conn = sqlite3.connect('riddle_test.db')
     c = conn.cursor()
     
-    # First, check if the user has any incomplete riddles
+    # Add a cheating flag to all incomplete riddles
     c.execute('''
-        SELECT COUNT(*) 
-        FROM user_progress 
+        UPDATE user_progress
+        SET answer_attempt = "FLAGGED-TAB-SWITCHING"
         WHERE user_id = ? AND completed = 0
     ''', (session['user_id'],))
     
-    incomplete_count = c.fetchone()[0]
+    # Mark test as completed
+    c.execute("UPDATE users SET test_completed = 1 WHERE id = ?", (session['user_id'],))
     
-    if incomplete_count > 0:
-        # Add cheating flag to all incomplete riddles
-        # This will prevent further attempts on these riddles
-        c.execute('''
-            UPDATE user_progress 
-            SET completed = 1, 
-                score = 0,
-                completion_time = ?,
-                answer_attempt = "FLAGGED-TAB-SWITCHING"
-            WHERE user_id = ? AND completed = 0
-        ''', (datetime.now().isoformat(), session['user_id']))
-        
     conn.commit()
     conn.close()
     
     return jsonify({'success': True})
-
-
+    
 
 @app.route('/admin/export_results')
 def export_results():
