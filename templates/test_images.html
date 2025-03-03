@@ -15,28 +15,82 @@
   {% for riddle in riddles_with_images %}
   <div class="col-md-6 mb-4">
     <div class="card riddle-card" id="riddle-{{ riddle.id }}">
-      <div class="card-header d-flex justify-content-between align-items-center">
+      <div
+        class="card-header d-flex justify-content-between align-items-center"
+      >
         <h5 class="mb-0">Riddle #{{ loop.index }}</h5>
-        <span class="badge {% if riddle.completed %}bg-success{% else %}bg-primary{% endif %}">
+        <span
+          class="badge {% if riddle.completed %}bg-success{% else %}bg-primary{% endif %}"
+        >
           {% if riddle.completed %}Completed{% else %}Score:
           <span class="riddle-score">{{ riddle.score }}</span>/10{% endif %}
         </span>
       </div>
       <div class="card-body">
-        <p class="riddle-question">{{ riddle.question }}</p>
-        {% if riddle.image %}
-        <img src="{{ url_for('static', filename='uploads/' + riddle.image) }}" class="riddle-image img-fluid mt-3" alt="Riddle Image">
-        {% endif %}
+        <p class="riddle-question">
+          {{ riddle.question }} {% if riddle.image %}
+          <img
+            src="{{ url_for('static', filename='uploads/' + riddle.image) }}"
+            class="riddle-image img-fluid mt-3"
+            alt="Riddle Image"
+          />
+          {% endif %}
+        </p>
 
-        <div class="hints-container mb-3" {% if riddle.completed %}style="display: none;"{% endif %}>
+        <div
+          class="hints-container mb-3"
+          {%
+          if
+          riddle.completed
+          %}style="display: none;"
+          {%
+          endif
+          %}
+        >
           <div class="d-flex mb-2">
-            <button class="btn btn-outline-warning btn-sm hint-btn" data-riddle-id="{{ riddle.id }}" data-hint-num="1" {% if riddle.hint1_used or riddle.completed %}disabled{% endif %}>
+            <button
+              class="btn btn-outline-warning btn-sm hint-btn"
+              data-riddle-id="{{ riddle.id }}"
+              data-hint-num="1"
+              {%
+              if
+              riddle.hint1_used
+              or
+              riddle.completed
+              %}disabled{%
+              endif
+              %}
+            >
               Hint 1 (-2 points)
             </button>
-            <button class="btn btn-outline-warning btn-sm hint-btn" data-riddle-id="{{ riddle.id }}" data-hint-num="2" {% if riddle.hint2_used or riddle.completed %}disabled{% endif %}>
+            <button
+              class="btn btn-outline-warning btn-sm hint-btn"
+              data-riddle-id="{{ riddle.id }}"
+              data-hint-num="2"
+              {%
+              if
+              riddle.hint2_used
+              or
+              riddle.completed
+              %}disabled{%
+              endif
+              %}
+            >
               Hint 2 (-3 points)
             </button>
-            <button class="btn btn-outline-warning btn-sm hint-btn" data-riddle-id="{{ riddle.id }}" data-hint-num="3" {% if riddle.hint3_used or riddle.completed %}disabled{% endif %}>
+            <button
+              class="btn btn-outline-warning btn-sm hint-btn"
+              data-riddle-id="{{ riddle.id }}"
+              data-hint-num="3"
+              {%
+              if
+              riddle.hint3_used
+              or
+              riddle.completed
+              %}disabled{%
+              endif
+              %}
+            >
               Hint 3 (-4 points)
             </button>
           </div>
@@ -57,17 +111,59 @@
           </div>
         </div>
 
-        <div class="answer-container" {% if riddle.completed %}style="display: none;"{% endif %}>
+        <div
+          class="answer-container"
+          {%
+          if
+          riddle.completed
+          %}style="display: none;"
+          {%
+          endif
+          %}
+        >
           <div class="input-group mb-3">
-            <input type="text" class="form-control answer-input" placeholder="Your answer" {% if riddle.completed %}disabled{% endif %} />
-            <button class="btn btn-primary submit-btn" data-riddle-id="{{ riddle.id }}" {% if riddle.completed %}disabled{% endif %}>
+            <input
+              type="text"
+              class="form-control answer-input"
+              placeholder="Your answer"
+              {%
+              if
+              riddle.completed
+              %}disabled{%
+              endif
+              %}
+            />
+            <button
+              class="btn btn-primary submit-btn"
+              data-riddle-id="{{ riddle.id }}"
+              {%
+              if
+              riddle.completed
+              %}disabled{%
+              endif
+              %}
+            >
               Submit
             </button>
           </div>
-          <div class="feedback-message text-danger" id="feedback-{{ riddle.id }}"></div>
+          <div
+            class="feedback-message text-danger"
+            id="feedback-{{ riddle.id }}"
+          ></div>
         </div>
 
-        <div class="success-message" id="success-{{ riddle.id }}" {% if not riddle.completed %}style="display: none;"{% endif %}>
+        <div
+          class="success-message"
+          id="success-{{ riddle.id }}"
+          {%
+          if
+          not
+          riddle.completed
+          %}style="display: none;"
+          {%
+          endif
+          %}
+        >
           <div class="alert alert-success">
             <strong>Correct!</strong> You've solved this riddle and earned
             <span class="earned-points">{{ riddle.score }}</span> points.
@@ -81,8 +177,14 @@
 
 <div class="row">
   <div class="col-12 text-center mt-3">
-    <a href="{{ url_for('test_without_images') }}" class="btn btn-secondary mr-2">Back to Text Questions</a>
-    <a href="{{ url_for('results') }}" class="btn btn-success">View My Results</a>
+    <a
+      href="{{ url_for('test_without_images') }}"
+      class="btn btn-secondary mr-2"
+      >Back to Text Questions</a
+    >
+    <a href="{{ url_for('results') }}" class="btn btn-success"
+      >View My Results</a
+    >
   </div>
 </div>
 {% endblock %} {% block scripts %}

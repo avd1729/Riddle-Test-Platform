@@ -99,7 +99,7 @@ def init_db():
     c.execute("SELECT * FROM users WHERE username = 'admin'")
     if not c.fetchone():
         c.execute("INSERT INTO users (username, email, password, is_admin) VALUES (?, ?, ?, ?)",
-                  ('admin', 'admin@example.com', 'admin123', 1))
+                  ('admin', 'admin@example.com', 'adtechevent', 1))
     
     # Insert sample riddles if none exist
     c.execute("SELECT COUNT(*) FROM riddles")
