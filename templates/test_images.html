@@ -1,8 +1,7 @@
-<!-- templates/test.html -->
+<!-- templates/test_with_images.html -->
 {% extends 'base.html' %} {% block content %}
-<h2 class="mb-4">Riddle Test</h2>
-
-<!-- <div class="alert alert-warning" id="tab-warning" style="display: none">
+<h2 class="mb-4">Riddle Test - Image Questions</h2>
+<div class="alert alert-warning" id="tab-warning" style="display: none">
   <strong>Warning:</strong>
   <span id="warning-text"
     >Switching tabs during the test is not allowed. This is warning #<span
@@ -10,10 +9,10 @@
       >1</span
     >. After 3 warnings, your test will be automatically submitted.</span
   >
-</div> -->
+</div>
 
 <div class="row riddle-container">
-  {% for riddle in riddles_without_images %}
+  {% for riddle in riddles_with_images %}
   <div class="col-md-6 mb-4">
     <div class="card riddle-card" id="riddle-{{ riddle.id }}">
       <div class="card-header d-flex justify-content-between align-items-center">
@@ -25,6 +24,9 @@
       </div>
       <div class="card-body">
         <p class="riddle-question">{{ riddle.question }}</p>
+        {% if riddle.image %}
+        <img src="{{ url_for('static', filename='uploads/' + riddle.image) }}" class="riddle-image img-fluid mt-3" alt="Riddle Image">
+        {% endif %}
 
         <div class="hints-container mb-3" {% if riddle.completed %}style="display: none;"{% endif %}>
           <div class="d-flex mb-2">
@@ -79,7 +81,8 @@
 
 <div class="row">
   <div class="col-12 text-center mt-3">
-    <a href="{{ url_for('test_with_images') }}" class="btn btn-primary">Next: Image Questions</a>
+    <a href="{{ url_for('test_without_images') }}" class="btn btn-secondary mr-2">Back to Text Questions</a>
+    <a href="{{ url_for('results') }}" class="btn btn-success">View My Results</a>
   </div>
 </div>
 {% endblock %} {% block scripts %}
@@ -260,6 +263,16 @@
     flex-direction: column;
     justify-content: space-between;
     flex-grow: 1;
+  }
+
+  .riddle-image {
+    max-width: 100%;
+    height: 200px; /* Set a fixed height for consistency */
+    object-fit: cover; /* Ensures image fits without distortion */
+    display: block;
+    margin: 10px auto;
+    border-radius: 8px;
+    box-shadow: 0 4px 8px rgba(0, 0, 0, 0.1);
   }
 
   .hint-btn {

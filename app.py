@@ -6,9 +6,32 @@ from datetime import datetime
 import json
 import secrets
 import random
+from werkzeug.utils import secure_filename
+
 
 app = Flask(__name__)
 app.secret_key = secrets.token_hex(16)
+app.config['UPLOAD_FOLDER'] = 'static/uploads'
+os.makedirs(app.config['UPLOAD_FOLDER'], exist_ok=True)
+
+def add_image_column():
+    conn = sqlite3.connect('riddle_test.db')
+    c = conn.cursor()
+
+    # Check if the "image" column already exists
+    c.execute("PRAGMA table_info(riddles);")
+    columns = [column[1] for column in c.fetchall()]
+    
+    if "image" not in columns:
+        c.execute("ALTER TABLE riddles ADD COLUMN image TEXT;")  # Add missing column
+        conn.commit()
+        print("Added 'image' column to riddles table.")
+
+    conn.close()
+
+# Run this once to update the database schema
+add_image_column()
+
 
 # Database initialization
 def init_db():
@@ -27,16 +50,31 @@ def init_db():
     ''')
     
     # Riddles table
-    c.execute('''
+    # c.execute('''
+    #     CREATE TABLE IF NOT EXISTS riddles (
+    #         id INTEGER PRIMARY KEY AUTOINCREMENT,
+    #         question TEXT NOT NULL,
+    #         answer TEXT NOT NULL,
+    #         hint1 TEXT NOT NULL,
+    #         hint2 TEXT NOT NULL,
+    #         hint3 TEXT NOT NULL
+    #     )
+    # ''')
+
+
+    # Modify riddles table to include an image field
+    c.execute(''' 
         CREATE TABLE IF NOT EXISTS riddles (
             id INTEGER PRIMARY KEY AUTOINCREMENT,
             question TEXT NOT NULL,
             answer TEXT NOT NULL,
             hint1 TEXT NOT NULL,
             hint2 TEXT NOT NULL,
-            hint3 TEXT NOT NULL
+            hint3 TEXT NOT NULL,
+            image TEXT  -- New column for storing image filenames
         )
     ''')
+
     
     # User progress table
     c.execute('''
@@ -189,52 +227,110 @@ def logout():
 # Also modify the test route to check if the user has been flagged for cheating
 @app.route('/test')
 def test():
-    if 'user_id' not in session:
-        flash('Please log in to take the test.')
-        return redirect(url_for('login'))
-    
-    conn = sqlite3.connect('riddle_test.db')
-    c = conn.cursor()
-    
-    # Check if the user has been flagged for cheating
-    c.execute('''
-        SELECT COUNT(*) 
-        FROM user_progress 
-        WHERE user_id = ? AND answer_attempt = "FLAGGED-TAB-SWITCHING"
-    ''', (session['user_id'],))
-    
-    flag_count = c.fetchone()[0]
-    
-    # If flagged, redirect to results
-    if flag_count > 0:
-        conn.close()
-        flash('You have been flagged for tab switching. Test access is restricted.')
-        return redirect(url_for('results'))
-    
-    # Get all riddles with user progress
-    c.execute('''
-        SELECT r.id, r.question, up.score, up.completed, up.hint1_used, up.hint2_used, up.hint3_used
-        FROM riddles r
-        LEFT JOIN user_progress up ON r.id = up.riddle_id AND up.user_id = ?
-        ORDER BY r.id
-    ''', (session['user_id'],))
-    
-    riddle_data = c.fetchall()
-    conn.close()
-    
-    riddles = []
-    for riddle in riddle_data:
-        riddles.append({
-            'id': riddle[0],
-            'question': riddle[1],
-            'score': riddle[2],
-            'completed': riddle[3],
-            'hint1_used': riddle[4],
-            'hint2_used': riddle[5],
-            'hint3_used': riddle[6]
-        })
-    
-    return render_template('test.html', riddles=riddles)
+    # This will now be the redirect to the first page (without images)
+    return redirect(url_for('test_without_images'))
+
+@app.route('/test_without_images') 
+def test_without_images(): 
+    if 'user_id' not in session: 
+        flash('Please log in to take the test.') 
+        return redirect(url_for('login')) 
+     
+    conn = sqlite3.connect('riddle_test.db') 
+    c = conn.cursor() 
+     
+    # Check if the user has been flagged for cheating 
+    c.execute(''' 
+        SELECT COUNT(*)  
+        FROM user_progress  
+        WHERE user_id = ? AND answer_attempt = "FLAGGED-TAB-SWITCHING" 
+    ''', (session['user_id'],)) 
+     
+    flag_count = c.fetchone()[0] 
+     
+    # If flagged, redirect to results 
+    if flag_count > 0: 
+        conn.close() 
+        flash('You have been flagged for tab switching. Test access is restricted.') 
+        return redirect(url_for('results')) 
+     
+    # Get all riddles WITHOUT images with user progress 
+    c.execute(''' 
+        SELECT r.id, r.question, r.image, up.score, up.completed, up.hint1_used, up.hint2_used, up.hint3_used 
+        FROM riddles r 
+        LEFT JOIN user_progress up ON r.id = up.riddle_id AND up.user_id = ? 
+        WHERE r.image IS NULL OR r.image = ""
+        ORDER BY r.id 
+    ''', (session['user_id'],)) 
+     
+    riddle_data = c.fetchall() 
+    conn.close() 
+     
+    riddles_without_images = [] 
+    for riddle in riddle_data: 
+        riddles_without_images.append({ 
+            'id': riddle[0], 
+            'question': riddle[1], 
+            'image': riddle[2], 
+            'score': riddle[3], 
+            'completed': riddle[4], 
+            'hint1_used': riddle[5], 
+            'hint2_used': riddle[6], 
+            'hint3_used': riddle[7], 
+        }) 
+     
+    return render_template('test.html', riddles_without_images=riddles_without_images)
+
+@app.route('/test_with_images') 
+def test_with_images(): 
+    if 'user_id' not in session: 
+        flash('Please log in to take the test.') 
+        return redirect(url_for('login')) 
+     
+    conn = sqlite3.connect('riddle_test.db') 
+    c = conn.cursor() 
+     
+    # Check if the user has been flagged for cheating 
+    c.execute(''' 
+        SELECT COUNT(*)  
+        FROM user_progress  
+        WHERE user_id = ? AND answer_attempt = "FLAGGED-TAB-SWITCHING" 
+    ''', (session['user_id'],)) 
+     
+    flag_count = c.fetchone()[0] 
+     
+    # If flagged, redirect to results 
+    if flag_count > 0: 
+        conn.close() 
+        flash('You have been flagged for tab switching. Test access is restricted.') 
+        return redirect(url_for('results')) 
+     
+    # Get all riddles WITH images with user progress 
+    c.execute(''' 
+        SELECT r.id, r.question, r.image, up.score, up.completed, up.hint1_used, up.hint2_used, up.hint3_used 
+        FROM riddles r 
+        LEFT JOIN user_progress up ON r.id = up.riddle_id AND up.user_id = ? 
+        WHERE r.image IS NOT NULL AND r.image != ""
+        ORDER BY r.id 
+    ''', (session['user_id'],)) 
+     
+    riddle_data = c.fetchall() 
+    conn.close() 
+     
+    riddles_with_images = [] 
+    for riddle in riddle_data: 
+        riddles_with_images.append({ 
+            'id': riddle[0], 
+            'question': riddle[1], 
+            'image': riddle[2], 
+            'score': riddle[3], 
+            'completed': riddle[4], 
+            'hint1_used': riddle[5], 
+            'hint2_used': riddle[6], 
+            'hint3_used': riddle[7], 
+        }) 
+     
+    return render_template('test_images.html', riddles_with_images=riddles_with_images)
 
 @app.route('/get_hint/<int:riddle_id>/<int:hint_num>', methods=['POST'])
 def get_hint(riddle_id, hint_num):
@@ -407,8 +503,8 @@ def results():
                            results=results, 
                            total_score=total_score, 
                            max_possible=max_possible,
-                           percentage_score=percentage_score,
-                           any_flagged=any_flagged)
+                           percentage_score=percentage_score,)
+                        #    any_flagged=any_flagged)
 
 @app.route('/admin_dashboard')
 def admin_dashboard():
@@ -462,46 +558,55 @@ def add_riddle():
     if 'user_id' not in session or not session.get('is_admin'):
         return jsonify({'error': 'Unauthorized'}), 401
     
-    data = request.json
-    question = data.get('question')
-    answer = data.get('answer')
-    hint1 = data.get('hint1')
-    hint2 = data.get('hint2')
-    hint3 = data.get('hint3')
-    
+    question = request.form.get('question')
+    answer = request.form.get('answer')
+    hint1 = request.form.get('hint1')
+    hint2 = request.form.get('hint2')
+    hint3 = request.form.get('hint3')
+    image = request.files.get('image')  # Get image from request
+
     if not all([question, answer, hint1, hint2, hint3]):
         return jsonify({'error': 'All fields are required'}), 400
-    
+
+    image_filename = None
+    if image:
+        image_filename = secure_filename(image.filename)
+        image.save(os.path.join(app.config['UPLOAD_FOLDER'], image_filename))
+
     conn = sqlite3.connect('riddle_test.db')
     c = conn.cursor()
-    
+
     try:
-        # Add new riddle
+        # Add new riddle with image support
         c.execute('''
-            INSERT INTO riddles (question, answer, hint1, hint2, hint3)
-            VALUES (?, ?, ?, ?, ?)
-        ''', (question, answer, hint1, hint2, hint3))
+            INSERT INTO riddles (question, answer, hint1, hint2, hint3, image)
+            VALUES (?, ?, ?, ?, ?, ?)
+        ''', (question, answer, hint1, hint2, hint3, image_filename))
         
         riddle_id = c.lastrowid
-        
+
         # Initialize progress for all users
         c.execute("SELECT id FROM users WHERE is_admin = 0")
         user_ids = c.fetchall()
-        
+
         for user_id in user_ids:
             c.execute("INSERT INTO user_progress (user_id, riddle_id) VALUES (?, ?)",
                      (user_id[0], riddle_id))
         
         conn.commit()
-        
+
         return jsonify({
             'success': True,
-            'riddle_id': riddle_id
+            'riddle_id': riddle_id,
+            'image_url': f"/static/uploads/{image_filename}" if image_filename else None
         })
     except Exception as e:
         return jsonify({'error': str(e)}), 500
     finally:
         conn.close()
+
+
+
 
 @app.route('/admin/delete_riddle/<int:riddle_id>', methods=['POST'])
 def delete_riddle(riddle_id):
@@ -688,6 +793,10 @@ def export_results():
         results_list.append(result_dict)
     
     return jsonify(results_list)
+
+@app.route('/uploads/<filename>')
+def uploaded_file(filename):
+    return redirect(url_for('static', filename=f'uploads/{filename}'))
 
 if __name__ == '__main__':
     app.run(debug=True)

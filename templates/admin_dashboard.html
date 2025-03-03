@@ -180,15 +180,10 @@
         ></button>
       </div>
       <div class="modal-body">
-        <form id="addRiddleForm">
+        <form id="addRiddleForm" enctype="multipart/form-data">
           <div class="mb-3">
             <label for="question" class="form-label">Question</label>
-            <textarea
-              class="form-control"
-              id="question"
-              rows="2"
-              required
-            ></textarea>
+            <textarea class="form-control" id="question" rows="2" required></textarea>
           </div>
           <div class="mb-3">
             <label for="answer" class="form-label">Answer</label>
@@ -206,8 +201,13 @@
             <label for="hint3" class="form-label">Hint 3 (-4 points)</label>
             <input type="text" class="form-control" id="hint3" required />
           </div>
+          <div class="mb-3">
+            <label for="image" class="form-label">Upload Image (optional)</label>
+            <input type="file" class="form-control" id="image" accept="image/*" />
+          </div>
         </form>
       </div>
+      
       <div class="modal-footer">
         <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">
           Cancel
@@ -260,44 +260,50 @@
   document.addEventListener("DOMContentLoaded", function () {
     // Add Riddle
     const saveRiddleBtn = document.getElementById("saveRiddleBtn");
+
     saveRiddleBtn.addEventListener("click", function () {
-      const question = document.getElementById("question").value;
-      const answer = document.getElementById("answer").value;
-      const hint1 = document.getElementById("hint1").value;
-      const hint2 = document.getElementById("hint2").value;
-      const hint3 = document.getElementById("hint3").value;
+        const question = document.getElementById("question").value;
+        const answer = document.getElementById("answer").value;
+        const hint1 = document.getElementById("hint1").value;
+        const hint2 = document.getElementById("hint2").value;
+        const hint3 = document.getElementById("hint3").value;
+        const image = document.getElementById("image");
 
-      if (!question || !answer || !hint1 || !hint2 || !hint3) {
-        alert("All fields are required");
-        return;
-      }
+        // Validate required fields
+        if (!question || !answer || !hint1 || !hint2 || !hint3) {
+            alert("All fields are required");
+            return;
+        }
 
-      fetch("/admin/add_riddle", {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-        },
-        body: JSON.stringify({
-          question: question,
-          answer: answer,
-          hint1: hint1,
-          hint2: hint2,
-          hint3: hint3,
-        }),
-      })
-        .then((response) => response.json())
-        .then((data) => {
-          if (data.success) {
-            alert("Riddle added successfully!");
-            location.reload();
-          } else {
-            alert("Error: " + data.error);
-          }
+        // Create FormData object to send files
+        let formData = new FormData();
+        formData.append("question", question);
+        formData.append("answer", answer);
+        formData.append("hint1", hint1);
+        formData.append("hint2", hint2);
+        formData.append("hint3", hint3);
+
+        if (image.files.length > 0) {
+            formData.append("image", image.files[0]); // Append image file
+        }
+
+        fetch("/admin/add_riddle", {
+            method: "POST",
+            body: formData, // Send FormData instead of JSON
         })
-        .catch((error) => {
-          console.error("Error:", error);
-          alert("An error occurred while adding the riddle.");
-        });
+            .then((response) => response.json())
+            .then((data) => {
+                if (data.success) {
+                    alert("Riddle added successfully!");
+                    location.reload();
+                } else {
+                    alert("Error: " + data.error);
+                }
+            })
+            .catch((error) => {
+                console.error("Error:", error);
+                alert("An error occurred while adding the riddle.");
+            });
     });
 
     // Delete Riddle
