@@ -186,6 +186,7 @@
   </div>
 </div>
 {% endblock %} {% block scripts %}
+
 <script>
   document.addEventListener("DOMContentLoaded", function () {
     // Tab switch tracking
@@ -254,6 +255,24 @@
         });
     }
 
+    // Function to get hint for a specific riddle
+    function fetchHint(riddleId, hintNum) {
+      return fetch(`/get_hint/${riddleId}/${hintNum}`, {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+        },
+      }).then((response) => {
+        if (!response.ok) {
+          return response.json().then((errorData) => {
+            console.error("Error response:", errorData);
+            throw new Error(errorData.error || "Failed to fetch hint");
+          });
+        }
+        return response.json();
+      });
+    }
+
     // Handle hint buttons
     const hintButtons = document.querySelectorAll(".hint-btn");
     hintButtons.forEach((button) => {
@@ -261,14 +280,39 @@
         const riddleId = this.getAttribute("data-riddle-id");
         const hintNum = this.getAttribute("data-hint-num");
 
+        console.log(
+          `Fetching hint for Riddle ID: ${riddleId}, Hint Number: ${hintNum}`
+        );
+
         fetch(`/get_hint/${riddleId}/${hintNum}`, {
           method: "POST",
           headers: {
             "Content-Type": "application/json",
           },
         })
-          .then((response) => response.json())
+          .then((response) => {
+            // Log the full response for debugging
+            console.log("Response status:", response.status);
+
+            // Check if the response is ok (status in the range 200-299)
+            if (!response.ok) {
+              // Try to parse error message from the response
+              return response
+                .json()
+                .then((errorData) => {
+                  console.error("Error response:", errorData);
+                  throw new Error(errorData.error || "Failed to fetch hint");
+                })
+                .catch(() => {
+                  // If JSON parsing fails, throw a generic error
+                  throw new Error(`HTTP error! status: ${response.status}`);
+                });
+            }
+            return response.json();
+          })
           .then((data) => {
+            console.log("Hint data received:", data);
+
             // Disable the button
             this.disabled = true;
 
@@ -276,23 +320,44 @@
             const scoreSpan = document.querySelector(
               `#riddle-${riddleId} .riddle-score`
             );
-            scoreSpan.textContent = data.updated_score;
+            if (scoreSpan) {
+              scoreSpan.textContent = data.updated_score;
+            } else {
+              console.error(`Score span not found for riddle ${riddleId}`);
+            }
 
             // Add hint to display
             const hintDisplay = document.querySelector(
               `#hint-display-${riddleId}`
             );
-            const hintBox = document.createElement("div");
-            hintBox.className = "hint-box";
-            hintBox.innerHTML = `<strong>Hint ${hintNum}:</strong> <span id="hint${hintNum}-${riddleId}">${data.hint}</span>`;
-            hintDisplay.appendChild(hintBox);
+            if (hintDisplay) {
+              const hintBox = document.createElement("div");
+              hintBox.className = "hint-box";
+              hintBox.innerHTML = `<strong>Hint ${hintNum}:</strong> <span id="hint${hintNum}-${riddleId}">${data.hint}</span>`;
+              hintDisplay.appendChild(hintBox);
+            } else {
+              console.error(`Hint display not found for riddle ${riddleId}`);
+            }
           })
           .catch((error) => {
-            console.error("Error:", error);
+            console.error("Error fetching hint:", error);
+
+            // More user-friendly error handling
+            const feedback = document.querySelector(`#feedback-${riddleId}`);
+            if (feedback) {
+              feedback.textContent =
+                error.message || "Failed to get hint. Please try again.";
+
+              // Clear after 3 seconds
+              setTimeout(() => {
+                feedback.textContent = "";
+              }, 3000);
+            } else {
+              alert(`Failed to get hint: ${error.message}`);
+            }
           });
       });
     });
-
     // Handle answer submission
     const submitButtons = document.querySelectorAll(".submit-btn");
     submitButtons.forEach((button) => {
@@ -377,6 +442,7 @@
     checkTestCompletion();
   });
 </script>
+
 {% endblock %} {% block styles %}
 <style>
   .card-body {

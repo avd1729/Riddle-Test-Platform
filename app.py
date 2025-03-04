@@ -293,41 +293,24 @@ def logout():
     session.clear()
     return redirect(url_for('index'))
 
-# Add this function to check if user has completed the test
 def has_completed_test(user_id):
     conn = sqlite3.connect('riddle_test.db')
     c = conn.cursor()
-    
-    # Check if all riddles are completed or if test is marked as complete
-    c.execute('''
-        SELECT 
-            (SELECT COUNT(*) FROM riddles) AS total_riddles,
-            (SELECT COUNT(*) FROM user_progress WHERE user_id = ? AND completed = 1) AS completed_riddles,
-            (SELECT COUNT(*) FROM users WHERE id = ? AND test_completed = 1) AS test_marked_complete
-    ''', (user_id, user_id))
-    
-    result = c.fetchone()
+    c.execute("SELECT COUNT(*) FROM user_progress WHERE user_id = ? AND completed = 0", (user_id,))
+    result = c.fetchone()[0]
     conn.close()
-    
-    total_riddles, completed_riddles, test_marked_complete = result
-    
-    # User has completed test if either all riddles are completed or test_completed flag is set
-    return completed_riddles == total_riddles or test_marked_complete > 0
+    return result == 0
 
-
-# Modify the test route to check if the user has completed the test
 @app.route('/test')
 def test():
     if 'user_id' not in session:
         flash('Please log in to take the test.')
         return redirect(url_for('login'))
-        
-    # Check if user has already completed the test
+    
     if has_completed_test(session['user_id']):
-        flash('You have already completed this test. You cannot take it again.')
+        flash('You have already completed this test.')
         return redirect(url_for('results'))
-        
-    # This will now be the redirect to the first page (without images)
+    
     return redirect(url_for('test_without_images'))
 
 @app.route('/test_without_images')
@@ -335,94 +318,81 @@ def test_without_images():
     if 'user_id' not in session:
         flash('Please log in to take the test.')
         return redirect(url_for('login'))
-    
+
     conn = sqlite3.connect('riddle_test.db')
     conn.row_factory = sqlite3.Row  
     c = conn.cursor()
-    
+
     try:
-        # Fetch user progress
+        # Fetch riddles not completed, without images
         c.execute('''
             SELECT up.riddle_id, r.question, r.answer, r.hint1, r.hint2, r.hint3, 
-                   up.hint1_used, up.hint2_used, up.hint3_used, up.completed
+                   up.hint1_used, up.hint2_used, up.hint3_used, up.completed, up.score
             FROM user_progress up
             JOIN riddles r ON up.riddle_id = r.id
-            WHERE up.user_id = ? AND up.completed = 0
+            WHERE up.user_id = ? AND up.completed = 0 AND (r.image IS NULL OR r.image = '')
             ORDER BY up.riddle_id
         ''', (session['user_id'],))
 
-        incomplete_riddles = c.fetchall()
-        
-        # Debugging: Print fetched riddles
-        print(f"Fetched riddles for user {session['user_id']}: {incomplete_riddles}")
+        riddles = c.fetchall()
 
-        if not incomplete_riddles:
+        if not riddles:
             return redirect(url_for('results'))
-        
+
         riddles_with_variants = []
-        
-        for riddle in incomplete_riddles:
+
+        for riddle in riddles:
             riddle_id = riddle['riddle_id']
-            
-            # Fetch variants
-            c.execute('''
-                SELECT question_variant FROM riddle_variants WHERE riddle_id = ?
-            ''', (riddle_id,))
-            
+            c.execute("SELECT question_variant FROM riddle_variants WHERE riddle_id = ?", (riddle_id,))
             variants = [row['question_variant'] for row in c.fetchall()]
             
-            # Debugging: Print variants
-            print(f"Variants for riddle {riddle_id}: {variants}")
-
-            # Include primary question as an option
             all_questions = variants + [riddle['question']]
-            
             session_key = f"riddle_{session['user_id']}_{riddle_id}"
+
             if session_key not in session:
-                session[session_key] = random.choice(all_questions)  # Store choice
-            
-            question_text = session[session_key]  
+                session[session_key] = random.choice(all_questions)
 
-            # Debugging: Print selected question
-            print(f"Selected question for riddle {riddle_id}: {question_text}")
+            # Explicitly create a dictionary with the correct keys
+            riddle_data = {
+                'id': riddle_id,  # Make sure 'id' is set first
+                'riddle_id': riddle_id,
+                'question': riddle['question'],
+                'answer': riddle['answer'],
+                'hint1': riddle['hint1'],
+                'hint2': riddle['hint2'],
+                'hint3': riddle['hint3'],
+                'hint1_used': riddle['hint1_used'],
+                'hint2_used': riddle['hint2_used'],
+                'hint3_used': riddle['hint3_used'],
+                'completed': riddle['completed'],
+                'score': riddle['score']
+            }
 
-            # Store riddle data
-            riddle_data = dict(riddle)
-            riddle_data['display_question'] = question_text
+            riddle_data['display_question'] = session[session_key]
             riddles_with_variants.append(riddle_data)
-        
-        # Ensure index is valid
+
         session.setdefault('current_riddle_index', 0)
         current_index = session['current_riddle_index']
-        
+
         if current_index >= len(riddles_with_variants):
             session['current_riddle_index'] = 0
             current_index = 0
-        
+
         current_riddle = riddles_with_variants[current_index]
+        session.setdefault('page_loaded_at', time.time())
 
-        if 'page_loaded_at' not in session:
-            session['page_loaded_at'] = time.time()
-        
-        return render_template(
-    'test.html',
-    riddles_without_images=riddles_with_variants,  # Use the correct variable name
-    riddle_number=current_index + 1,
-    total_riddles=len(riddles_with_variants),
-    hint1_used=current_riddle['hint1_used'],
-    hint2_used=current_riddle['hint2_used'],
-    hint3_used=current_riddle['hint3_used']
-)
+        return render_template('test.html',
+                       riddles_without_images=riddles_with_variants,
+                       riddle_number=current_index + 1,
+                       total_riddles=len(riddles_with_variants))
 
-        
     except Exception as e:
-        print(f"Error in test_without_images: {str(e)}")
-        flash('An error occurred while loading the test. Please try again.')
+        flash('An error occurred while loading the test.')
+        print(f"Error: {str(e)}")
         return redirect(url_for('admin_dashboard'))
-    
+
     finally:
         conn.close()
-
 
 @app.route('/test_with_images') 
 def test_with_images(): 
@@ -430,162 +400,153 @@ def test_with_images():
         flash('Please log in to take the test.') 
         return redirect(url_for('login')) 
     
-    # Check if user has already completed the test
     if has_completed_test(session['user_id']):
-        flash('You have already completed this test. You cannot take it again.')
+        flash('You have already completed this test.')
         return redirect(url_for('results'))
-     
+    
     conn = sqlite3.connect('riddle_test.db') 
     c = conn.cursor() 
-     
-    # Check if the user has been flagged for cheating 
-    c.execute(''' 
-        SELECT COUNT(*)  
-        FROM user_progress  
-        WHERE user_id = ? AND answer_attempt = "FLAGGED-TAB-SWITCHING" 
-    ''', (session['user_id'],)) 
-     
-    flag_count = c.fetchone()[0] 
-     
-    # If flagged, redirect to results 
-    if flag_count > 0: 
+    
+    c.execute("SELECT COUNT(*) FROM user_progress WHERE user_id = ? AND answer_attempt = 'FLAGGED-TAB-SWITCHING'", (session['user_id'],)) 
+    if c.fetchone()[0] > 0: 
         conn.close() 
-        flash('You have been flagged for tab switching. Test access is restricted.') 
+        flash('You have been flagged for tab switching.') 
         return redirect(url_for('results')) 
-     
-    # Get all riddles WITH images with user progress 
+    
     c.execute(''' 
         SELECT r.id, r.question, r.image, up.score, up.completed, up.hint1_used, up.hint2_used, up.hint3_used 
         FROM riddles r 
         LEFT JOIN user_progress up ON r.id = up.riddle_id AND up.user_id = ? 
-        WHERE r.image IS NOT NULL AND r.image != ""
+        WHERE r.image IS NOT NULL AND r.image != ''
         ORDER BY r.id 
     ''', (session['user_id'],)) 
-     
-    riddle_data = c.fetchall() 
+    
+    riddles = c.fetchall() 
     conn.close() 
-     
-    riddles_with_images = [] 
-    for riddle in riddle_data: 
-        riddles_with_images.append({ 
-            'id': riddle[0], 
-            'question': riddle[1], 
-            'image': riddle[2], 
-            'score': riddle[3], 
-            'completed': riddle[4], 
-            'hint1_used': riddle[5], 
-            'hint2_used': riddle[6], 
-            'hint3_used': riddle[7], 
-        }) 
-     
+    
+    riddles_with_images = [
+        {'id': r[0], 'question': r[1], 'image': r[2], 'score': r[3] or 10, 'completed': r[4] or 0,
+         'hint1_used': r[5] or 0, 'hint2_used': r[6] or 0, 'hint3_used': r[7] or 0} for r in riddles
+    ]
+    
     return render_template('test_images.html', riddles_with_images=riddles_with_images)
-
 
 @app.route('/get_hint/<int:riddle_id>/<int:hint_num>', methods=['POST'])
 def get_hint(riddle_id, hint_num):
     if 'user_id' not in session:
-        return jsonify({'error': 'Not logged in'}), 401
-    
+        return jsonify({"error": "Unauthorized"}), 403
+
     conn = sqlite3.connect('riddle_test.db')
+    conn.row_factory = sqlite3.Row
     c = conn.cursor()
-    
-    # Check if already completed
-    c.execute("SELECT completed FROM user_progress WHERE user_id = ? AND riddle_id = ?",
-             (session['user_id'], riddle_id))
-    if c.fetchone()[0]:
+
+    try:
+        # Ensure we fetch hints using the primary riddle ID
+        c.execute('''
+            SELECT r.hint1, r.hint2, r.hint3, up.hint1_used, up.hint2_used, up.hint3_used, up.score 
+            FROM user_progress up
+            JOIN riddles r ON up.riddle_id = r.id
+            WHERE up.user_id = ? AND up.riddle_id = ? AND (r.image IS NULL OR r.image = '')
+        ''', (session['user_id'], riddle_id))
+
+        riddle = c.fetchone()
+        if not riddle:
+            return jsonify({"error": "Riddle not found or not applicable"}), 404
+
+        hints = {1: 'hint1', 2: 'hint2', 3: 'hint3'}
+        hint_used_keys = {1: 'hint1_used', 2: 'hint2_used', 3: 'hint3_used'}
+
+        if hint_num not in hints:
+            return jsonify({"error": "Invalid hint number"}), 400
+
+        hint_key = hints[hint_num]
+        hint_used_key = hint_used_keys[hint_num]
+
+        if riddle[hint_used_key]:  
+            return jsonify({"error": "Hint already used"}), 400
+
+        hint_penalty = {1: 2, 2: 3, 3: 4}
+        updated_score = max(0, riddle['score'] - hint_penalty[hint_num])
+
+        # Update the database
+        c.execute(f'''
+            UPDATE user_progress 
+            SET {hint_used_key} = 1, score = ? 
+            WHERE user_id = ? AND riddle_id = ?
+        ''', (updated_score, session['user_id'], riddle_id))
+
+        conn.commit()
+
+        return jsonify({
+            "hint": riddle[hint_key],
+            "updated_score": updated_score
+        })
+
+    except Exception as e:
+        print(f"Error fetching hint: {str(e)}")
+        return jsonify({"error": "Error fetching hint"}), 500
+
+    finally:
         conn.close()
-        return jsonify({'error': 'Riddle already completed'}), 400
-    
-    # Get hint
-    hint_column = f"hint{hint_num}"
-    c.execute(f"SELECT {hint_column} FROM riddles WHERE id = ?", (riddle_id,))
-    hint = c.fetchone()[0]
-    
-    # Calculate score reduction
-    score_reduction = 0
-    if hint_num == 1:
-        score_reduction = 2
-        c.execute("UPDATE user_progress SET hint1_used = 1, score = score - ? WHERE user_id = ? AND riddle_id = ?",
-                 (score_reduction, session['user_id'], riddle_id))
-    elif hint_num == 2:
-        score_reduction = 3
-        c.execute("UPDATE user_progress SET hint2_used = 1, score = score - ? WHERE user_id = ? AND riddle_id = ?",
-                 (score_reduction, session['user_id'], riddle_id))
-    elif hint_num == 3:
-        score_reduction = 4
-        c.execute("UPDATE user_progress SET hint3_used = 1, score = score - ? WHERE user_id = ? AND riddle_id = ?",
-                 (score_reduction, session['user_id'], riddle_id))
-    
-    conn.commit()
-    
-    # Get updated score
-    c.execute("SELECT score FROM user_progress WHERE user_id = ? AND riddle_id = ?",
-             (session['user_id'], riddle_id))
-    updated_score = c.fetchone()[0]
-    
-    conn.close()
-    
-    return jsonify({
-        'hint': hint,
-        'score_reduction': score_reduction,
-        'updated_score': updated_score
-    })
+
 
 @app.route('/submit_answer/<int:riddle_id>', methods=['POST'])
 def submit_answer(riddle_id):
     if 'user_id' not in session:
         return jsonify({'error': 'Not logged in'}), 401
-    
+
     answer = request.json.get('answer', '').strip().lower()
-    
+
     conn = sqlite3.connect('riddle_test.db')
     c = conn.cursor()
-    
-    # Check if already completed
-    c.execute("SELECT completed FROM user_progress WHERE user_id = ? AND riddle_id = ?",
-             (session['user_id'], riddle_id))
-    if c.fetchone()[0]:
-        conn.close()
-        return jsonify({'error': 'Riddle already completed'}), 400
-    
-    # Get correct answer
-    c.execute("SELECT answer FROM riddles WHERE id = ?", (riddle_id,))
-    correct_answer = c.fetchone()[0].lower()
-    
-    # Check answer
-    is_correct = answer == correct_answer
-    
-    # Update user progress
-    if is_correct:
+
+    try:
         c.execute('''
-            UPDATE user_progress 
-            SET completed = 1, 
-                answer_attempt = ?, 
-                completion_time = ? 
-            WHERE user_id = ? AND riddle_id = ?
-        ''', (answer, datetime.now().isoformat(), session['user_id'], riddle_id))
-        
-        # Get current score
-        c.execute("SELECT score FROM user_progress WHERE user_id = ? AND riddle_id = ?",
-                 (session['user_id'], riddle_id))
-        score = c.fetchone()[0]
-        
-        conn.commit()
+            SELECT r.answer, up.completed, up.score 
+            FROM user_progress up
+            JOIN riddles r ON up.riddle_id = r.id
+            WHERE up.user_id = ? AND up.riddle_id = ? AND (r.image IS NULL OR r.image = '')
+        ''', (session['user_id'], riddle_id))
+
+        riddle = c.fetchone()
+        if not riddle:
+            return jsonify({'error': 'Riddle not found'}), 404
+
+        if riddle[1]:  
+            return jsonify({'error': 'Riddle already completed'}), 400
+
+        correct_answer = riddle[0].strip().lower()
+        is_correct = answer == correct_answer
+
+        if is_correct:
+            c.execute('''
+                UPDATE user_progress 
+                SET completed = 1, 
+                    answer_attempt = ?, 
+                    completion_time = ? 
+                WHERE user_id = ? AND riddle_id = ?
+            ''', (answer, datetime.now().isoformat(), session['user_id'], riddle_id))
+
+            conn.commit()
+
+            return jsonify({
+                'correct': True,
+                'score': riddle[2]
+            })
+        else:
+            c.execute("UPDATE user_progress SET answer_attempt = ? WHERE user_id = ? AND riddle_id = ?",
+                      (answer, session['user_id'], riddle_id))
+            conn.commit()
+
+            return jsonify({'correct': False})
+
+    except Exception as e:
+        print(f"Error submitting answer: {str(e)}")
+        return jsonify({'error': 'Error submitting answer'}), 500
+
+    finally:
         conn.close()
-        
-        return jsonify({
-            'correct': True,
-            'score': score
-        })
-    else:
-        c.execute("UPDATE user_progress SET answer_attempt = ? WHERE user_id = ? AND riddle_id = ?",
-                 (answer, session['user_id'], riddle_id))
-        conn.commit()
-        conn.close()
-        
-        return jsonify({
-            'correct': False
-        })
+
 
 # Modify the results route to mark the test as completed when viewed
 @app.route('/results')
