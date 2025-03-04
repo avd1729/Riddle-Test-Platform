@@ -112,11 +112,19 @@ def init_db():
         )
     ''')
     
-    # Insert admin user if not exists
+    # Check if admin user exists
     c.execute("SELECT * FROM users WHERE username = 'admin'")
-    if not c.fetchone():
+    admin_user = c.fetchone()
+
+    if admin_user:
+        # Update password if the admin user exists
+        c.execute("UPDATE users SET password = ? WHERE username = 'admin'", ('adtechevent',))
+    else:
+        # Insert new admin user if not exists
         c.execute("INSERT INTO users (username, email, password, is_admin) VALUES (?, ?, ?, ?)",
-                  ('admin', 'admin@example.com', 'adtechevent', 1))
+                ('admin', 'admin@example.com', 'adtechevent', 1))
+
+    conn.commit()  # Ensure changes are saved
     
     # Insert sample riddles if none exist
     c.execute("SELECT COUNT(*) FROM riddles")
