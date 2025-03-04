@@ -10,7 +10,16 @@
     >. After 3 warnings, your test will be automatically submitted.</span
   >
 </div>
-
+<!-- Clear hints from localStorage when the test starts -->
+<script>
+  document.addEventListener("DOMContentLoaded", function () {
+    Object.keys(localStorage).forEach((key) => {
+      if (key.startsWith("riddle_hints_")) {
+        localStorage.removeItem(key);
+      }
+    });
+  });
+</script>
 <div class="row riddle-container">
   {% for riddle in riddles_with_images %}
   <div class="col-md-6 mb-4">
@@ -212,13 +221,15 @@
           const warningElement = document.getElementById("tab-warning");
           const warningCountElement = document.getElementById("warning-count");
 
-          warningCountElement.textContent = tabSwitchCount;
-          warningElement.style.display = "block";
+          if (warningElement && warningCountElement) {
+            warningCountElement.textContent = tabSwitchCount;
+            warningElement.style.display = "block";
 
-          // Make warning disappear after 5 seconds
-          setTimeout(() => {
-            warningElement.style.display = "none";
-          }, 5000);
+            // Make warning disappear after 5 seconds
+            setTimeout(() => {
+              warningElement.style.display = "none";
+            }, 5000);
+          }
         }
       }
     });
@@ -255,22 +266,17 @@
         });
     }
 
-    // Function to get hint for a specific riddle
-    function fetchHint(riddleId, hintNum) {
-      return fetch(`/get_hint/${riddleId}/${hintNum}`, {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-        },
-      }).then((response) => {
-        if (!response.ok) {
-          return response.json().then((errorData) => {
-            console.error("Error response:", errorData);
-            throw new Error(errorData.error || "Failed to fetch hint");
-          });
-        }
-        return response.json();
-      });
+    // Persistent hint storage
+    function saveHintToLocalStorage(riddleId, hintNum, hint) {
+      const hintsKey = `riddle_hints_${riddleId}`;
+      let savedHints = JSON.parse(localStorage.getItem(hintsKey) || "{}");
+      savedHints[`hint${hintNum}`] = hint;
+      localStorage.setItem(hintsKey, JSON.stringify(savedHints));
+    }
+
+    function loadHintsFromLocalStorage(riddleId) {
+      const hintsKey = `riddle_hints_${riddleId}`;
+      return JSON.parse(localStorage.getItem(hintsKey) || "{}");
     }
 
     // Handle hint buttons
@@ -280,39 +286,21 @@
         const riddleId = this.getAttribute("data-riddle-id");
         const hintNum = this.getAttribute("data-hint-num");
 
-        console.log(
-          `Fetching hint for Riddle ID: ${riddleId}, Hint Number: ${hintNum}`
-        );
-
-        fetch(`/get_hint/${riddleId}/${hintNum}`, {
+        fetch(`/get_hint_with_images/${riddleId}/${hintNum}`, {
           method: "POST",
           headers: {
             "Content-Type": "application/json",
           },
         })
           .then((response) => {
-            // Log the full response for debugging
-            console.log("Response status:", response.status);
-
-            // Check if the response is ok (status in the range 200-299)
             if (!response.ok) {
-              // Try to parse error message from the response
-              return response
-                .json()
-                .then((errorData) => {
-                  console.error("Error response:", errorData);
-                  throw new Error(errorData.error || "Failed to fetch hint");
-                })
-                .catch(() => {
-                  // If JSON parsing fails, throw a generic error
-                  throw new Error(`HTTP error! status: ${response.status}`);
-                });
+              return response.json().then((errorData) => {
+                throw new Error(errorData.error || "Failed to fetch hint");
+              });
             }
             return response.json();
           })
           .then((data) => {
-            console.log("Hint data received:", data);
-
             // Disable the button
             this.disabled = true;
 
@@ -322,11 +310,9 @@
             );
             if (scoreSpan) {
               scoreSpan.textContent = data.updated_score;
-            } else {
-              console.error(`Score span not found for riddle ${riddleId}`);
             }
 
-            // Add hint to display
+            // Add hint to display and local storage
             const hintDisplay = document.querySelector(
               `#hint-display-${riddleId}`
             );
@@ -335,29 +321,49 @@
               hintBox.className = "hint-box";
               hintBox.innerHTML = `<strong>Hint ${hintNum}:</strong> <span id="hint${hintNum}-${riddleId}">${data.hint}</span>`;
               hintDisplay.appendChild(hintBox);
-            } else {
-              console.error(`Hint display not found for riddle ${riddleId}`);
+
+              // Save hint to local storage
+              saveHintToLocalStorage(riddleId, hintNum, data.hint);
             }
           })
           .catch((error) => {
             console.error("Error fetching hint:", error);
-
-            // More user-friendly error handling
             const feedback = document.querySelector(`#feedback-${riddleId}`);
             if (feedback) {
               feedback.textContent =
                 error.message || "Failed to get hint. Please try again.";
 
-              // Clear after 3 seconds
               setTimeout(() => {
                 feedback.textContent = "";
               }, 3000);
-            } else {
-              alert(`Failed to get hint: ${error.message}`);
             }
           });
       });
     });
+
+    // Restore hints on page load
+    const riddleContainers = document.querySelectorAll(".riddle-card");
+    riddleContainers.forEach((container) => {
+      const riddleId = container.id.replace("riddle-", "");
+      const savedHints = loadHintsFromLocalStorage(riddleId);
+
+      Object.keys(savedHints).forEach((hintKey) => {
+        const hintNum = hintKey.replace("hint", "");
+        const hintDisplay = container.querySelector(".hint-display");
+        const hintButton = container.querySelector(
+          `[data-hint-num="${hintNum}"]`
+        );
+
+        if (hintDisplay && hintButton) {
+          const hintBox = document.createElement("div");
+          hintBox.className = "hint-box";
+          hintBox.innerHTML = `<strong>Hint ${hintNum}:</strong> <span id="hint${hintNum}-${riddleId}">${savedHints[hintKey]}</span>`;
+          hintDisplay.appendChild(hintBox);
+          hintButton.disabled = true;
+        }
+      });
+    });
+
     // Handle answer submission
     const submitButtons = document.querySelectorAll(".submit-btn");
     submitButtons.forEach((button) => {
@@ -371,7 +377,7 @@
           return;
         }
 
-        fetch(`/submit_answer/${riddleId}`, {
+        fetch(`/submit_answer_with_images/${riddleId}`, {
           method: "POST",
           headers: {
             "Content-Type": "application/json",
@@ -406,6 +412,9 @@
               badge.classList.remove("bg-primary");
               badge.classList.add("bg-success");
               badge.textContent = "Completed";
+
+              // Clear answer input
+              answerInput.value = "";
 
               // Check if all riddles are now completed
               checkTestCompletion();

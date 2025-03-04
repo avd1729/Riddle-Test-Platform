@@ -11,251 +11,265 @@
     >. After 3 warnings, your test will be automatically submitted.
   </span>
 </div>
-
-<div class="col-md-6 mb-4">
-  {% for riddle in riddles_without_images %}
-  <div class="card riddle-card" id="riddle-{{ riddle.id }}">
-    <div class="card-header d-flex justify-content-between align-items-center">
-      <h5 class="mb-0">Riddle #{{ loop.index }}</h5>
-      <span class="badge {{ 'bg-success' if riddle.completed else 'bg-primary' }}">
-        {% if riddle.completed %}
-          Completed
-        {% else %}
-          Score: <span class="riddle-score">{{ riddle.score }}</span>/10
-        {% endif %}
-      </span>
-    </div>
-
-    <div class="card-body">
-      <p class="riddle-question">{{ riddle.display_question }}</p>
-
-      <!-- Hints Section -->
-      <div class="hints-container mb-3" {% if riddle.completed %}style="display: none;"{% endif %}>
-        <div class="d-flex mb-2">
-          {% for i in [1, 2, 3] %}
-            <button class="btn btn-outline-warning btn-sm hint-btn"
-                    data-riddle-id="{{ riddle.id }}"
-                    data-hint-num="{{ i }}"
-                    {% if riddle['hint' ~ i ~ '_used'] or riddle.completed %}disabled{% endif %}>
-              Hint {{ i }} (-{{ i+1 }} points)
-            </button>
-          {% endfor %}
-        </div>
-
-        <div class="hint-display" id="hint-display-{{ riddle.id }}">
-          {% for i in [1, 2, 3] %}
-            {% if riddle['hint' ~ i ~ '_used'] %}
-              <div class="hint-box">
-                <strong>Hint {{ i }}:</strong>
-                <span id="hint{{ i }}-{{ riddle.id }}">{{ riddle['hint' ~ i] }}</span>
-              </div>
-            {% endif %}
-          {% endfor %}
-        </div>
-      </div>
-
-      <!-- Answer Input Section -->
-      <div class="answer-container" {% if riddle.completed %}style="display: none;"{% endif %}>
-        <div class="input-group mb-3">
-          <input type="text" class="form-control answer-input"
-                 placeholder="Your answer"
-                 {% if riddle.completed %}disabled{% endif %} />
-          <button class="btn btn-primary submit-btn"
-                  data-riddle-id="{{ riddle.id }}"
-                  {% if riddle.completed %}disabled{% endif %}>
-            Submit
-          </button>
-        </div>
-        <div class="feedback-message text-danger" id="feedback-{{ riddle.id }}"></div>
-      </div>
-
-      <!-- Success Message -->
-      <div class="success-message"
-           id="success-{{ riddle.id }}"
-           {% if not riddle.completed %}style="display: none;"{% endif %}>
-        <div class="alert alert-success">
-          <strong>Correct!</strong> You've solved this riddle and earned
-          <span class="earned-points">{{ riddle.score }}</span> points.
-        </div>
-      </div>
-    </div>
-  </div>
-{% endfor %}
-
-</div>
-
 <div class="row">
-  <div class="col-12 text-center mt-3">
-    <a href="{{ url_for('test_with_images') }}" class="btn btn-primary">Next</a>
+  {% for riddle in riddles_without_images %}
+  <div class="col-md-6 mb-4">
+    <div class="card riddle-card" id="riddle-{{ riddle.id }}">
+      <div class="card-header d-flex justify-content-between align-items-center">
+        <h5 class="mb-0">Riddle #{{ loop.index }}</h5>
+        <span class="badge {{ 'bg-success' if riddle.completed else 'bg-primary' }}">
+          {% if riddle.completed %}
+            Completed
+          {% else %}
+            Score: <span class="riddle-score">{{ riddle.score }}</span>/10
+          {% endif %}
+        </span>
+      </div>
+
+      <div class="card-body">
+        <p class="riddle-question">{{ riddle.display_question }}</p>
+
+        <!-- Hints Section -->
+        <div class="hints-container mb-3" {% if riddle.completed %}style="display: none;"{% endif %}>
+          <div class="d-flex mb-2">
+            {% for i in [1, 2, 3] %}
+              <button class="btn btn-outline-warning btn-sm hint-btn"
+                      data-riddle-id="{{ riddle.id }}"
+                      data-hint-num="{{ i }}"
+                      {% if riddle['hint' ~ i ~ '_used'] or riddle.completed %}disabled{% endif %}>
+                Hint {{ i }} (-{{ i+1 }} points)
+              </button>
+            {% endfor %}
+          </div>
+
+          <div class="hint-display" id="hint-display-{{ riddle.id }}">
+            {% for i in [1, 2, 3] %}
+              {% if riddle['hint' ~ i ~ '_used'] %}
+                <div class="hint-box">
+                  <strong>Hint {{ i }}:</strong>
+                  <span id="hint{{ i }}-{{ riddle.id }}">{{ riddle['hint' ~ i] }}</span>
+                </div>
+              {% endif %}
+            {% endfor %}
+          </div>
+        </div>
+
+        <!-- Answer Input Section -->
+        <div class="answer-container" {% if riddle.completed %}style="display: none;"{% endif %}>
+          <div class="input-group mb-3">
+            <input type="text" class="form-control answer-input"
+                   placeholder="Your answer"
+                   {% if riddle.completed %}disabled{% endif %} />
+            <button class="btn btn-primary submit-btn"
+                    data-riddle-id="{{ riddle.id }}"
+                    {% if riddle.completed %}disabled{% endif %}>
+              Submit
+            </button>
+          </div>
+          <div class="feedback-message text-danger" id="feedback-{{ riddle.id }}"></div>
+        </div>
+
+        <!-- Success Message -->
+        <div class="success-message"
+             id="success-{{ riddle.id }}"
+             {% if not riddle.completed %}style="display: none;"{% endif %}>
+          <div class="alert alert-success">
+            <strong>Correct!</strong> You've solved this riddle and earned
+            <span class="earned-points">{{ riddle.final_score }}</span> points.
+          </div>
+        </div>
+      </div>
+    </div>
   </div>
+
+  {% if loop.index is divisibleby(2) %}
+  </div><div class="row">
+  {% endif %}
+
+  {% endfor %}
 </div>
 
-{% endblock %} {% block scripts %}
+<div class="col-12 text-center mt-3">
+  <a href="{{ url_for('test_with_images') }}" class="btn btn-primary">Next</a>
+</div>
+{% endblock %}
+
+{% block scripts %}
 <script>
   document.addEventListener("DOMContentLoaded", function () {
-      console.log("DOM fully loaded");
+    // Tab switch tracking
+    let tabSwitchCount = 0;
+    const maxTabSwitches = 3;
+    let isRedirecting = false;
   
-      // Tab switch tracking
-      let tabSwitchCount = 0;
-      const maxTabSwitches = 3;
-      let isRedirecting = false;
+    // Function to handle tab visibility change
+    document.addEventListener("visibilitychange", function () {
+      if (document.visibilityState === "hidden" && !isRedirecting) {
+        tabSwitchCount++;
   
-      // Function to handle tab visibility change
-      document.addEventListener("visibilitychange", function () {
-          if (document.visibilityState === "hidden" && !isRedirecting) {
-              tabSwitchCount++;
+        if (tabSwitchCount >= maxTabSwitches) {
+          isRedirecting = true;
+          recordCheatingAttempt().then(() => {
+            window.location.href = "{{ url_for('results') }}";
+          });
+        } else {
+          const warningElement = document.getElementById("tab-warning");
+          const warningCountElement = document.getElementById("warning-count");
   
-              if (tabSwitchCount >= maxTabSwitches) {
-                  // Redirect to results page after 3 warnings
-                  isRedirecting = true;
+          if (warningElement && warningCountElement) {
+            warningCountElement.textContent = tabSwitchCount;
+            warningElement.style.display = "block";
   
-                  // Record the attempt to cheat
-                  recordCheatingAttempt().then(() => {
-                      window.location.href = "{{ url_for('results') }}";
-                  });
-              } else {
-                  // Show warning
-                  const warningElement = document.getElementById("tab-warning");
-                  const warningCountElement = document.getElementById("warning-count");
-  
-                  if (warningElement && warningCountElement) {
-                      warningCountElement.textContent = tabSwitchCount;
-                      warningElement.style.display = "block";
-  
-                      // Make warning disappear after 5 seconds
-                      setTimeout(() => {
-                          warningElement.style.display = "none";
-                      }, 5000);
-                  }
-              }
+            setTimeout(() => {
+              warningElement.style.display = "none";
+            }, 5000);
           }
-      });
-  
-      // Function to record cheating attempt
-      async function recordCheatingAttempt() {
-          try {
-              await fetch("/record_cheating_attempt", {
-                  method: "POST",
-                  headers: {
-                      "Content-Type": "application/json",
-                  },
-                  body: JSON.stringify({
-                      tab_switches: tabSwitchCount,
-                  }),
-              });
-          } catch (error) {
-              console.error("Error recording cheating attempt:", error);
-          }
+        }
       }
+    });
   
-      // Handle Hint Buttons
-      document.querySelectorAll(".hint-btn").forEach(button => {
-          button.addEventListener("click", function () {
-              const riddleId = this.getAttribute("data-riddle-id");
-              const hintNum = this.getAttribute("data-hint-num");
+    // Function to record cheating attempt
+    async function recordCheatingAttempt() {
+      try {
+        await fetch("/record_cheating_attempt", {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+          },
+          body: JSON.stringify({
+            tab_switches: tabSwitchCount,
+          }),
+        });
+      } catch (error) {
+        console.error("Error recording cheating attempt:", error);
+      }
+    }
   
-              if (!riddleId || !hintNum) {
-                  console.error("Missing riddleId or hintNum");
-                  return;
-              }
+    // Handle Hint Buttons
+    document.querySelectorAll(".hint-btn").forEach(button => {
+      button.addEventListener("click", function () {
+        const riddleId = this.getAttribute("data-riddle-id");
+        const hintNum = this.getAttribute("data-hint-num");
   
-              fetch(`/get_hint/${riddleId}/${hintNum}`, {
-                  method: "POST",
-                  headers: {
-                      "Content-Type": "application/json",
-                  }
-              })
-              .then(response => {
-                  if (!response.ok) {
-                      throw new Error(`Hint request failed: ${response.status}`);
-                  }
-                  return response.json();
-              })
-              .then(data => {
-                  // Disable hint button
-                  this.disabled = true;
+        fetch(`/get_hint_without_images/${riddleId}/${hintNum}`, {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+          }
+        })
+        .then(response => {
+          if (!response.ok) {
+            throw new Error(`Hint request failed: ${response.status}`);
+          }
+          return response.json();
+        })
+        .then(data => {
+          // Disable the clicked hint button
+          button.disabled = true;
   
-                  // Update score
-                  const scoreSpan = document.querySelector(`#riddle-${riddleId} .riddle-score`);
-                  if (scoreSpan) {
-                      scoreSpan.textContent = data.updated_score;
-                  }
+          // Update the displayed score
+          const scoreSpan = document.querySelector(`#riddle-${riddleId} .riddle-score`);
+          const badge = document.querySelector(`#riddle-${riddleId} .badge`);
   
-                  // Add hint to display
-                  const hintDisplay = document.querySelector(`#hint-display-${riddleId}`);
-                  if (hintDisplay) {
-                      const hintBox = document.createElement("div");
-                      hintBox.className = "hint-box";
-                      hintBox.innerHTML = `<strong>Hint ${hintNum}:</strong> <span id="hint${hintNum}-${riddleId}">${data.hint}</span>`;
-                      hintDisplay.appendChild(hintBox);
-                  }
-              })
-              .catch(error => {
-                  console.error("Hint error:", error);
-                  alert("Failed to get hint. Please try again.");
-              });
-          });
+          if (scoreSpan) {
+            scoreSpan.textContent = data.updated_score;
+          }
+  
+          if (badge) {
+            badge.innerHTML = `Score: <span class="riddle-score">${data.updated_score}</span>/10`;
+          }
+  
+          // Display the hint
+          const hintDisplay = document.querySelector(`#hint-display-${riddleId}`);
+          if (hintDisplay) {
+            const hintBox = document.createElement("div");
+            hintBox.className = "hint-box";
+            hintBox.innerHTML = `<strong>Hint ${hintNum}:</strong> <span id="hint${hintNum}-${riddleId}">${data.hint}</span>`;
+            hintDisplay.appendChild(hintBox);
+          }
+        })
+        .catch(error => {
+          console.error("Hint error:", error);
+          alert("Failed to get hint. Please try again.");
+        });
       });
+    });
   
-      // Handle Answer Submission
-      document.querySelectorAll(".submit-btn").forEach(button => {
-          button.addEventListener("click", function () {
-              const riddleId = this.getAttribute("data-riddle-id");
-              const answerInput = this.closest('.answer-container').querySelector('.answer-input');
-              const answer = answerInput.value.trim();
-              const feedbackElement = document.getElementById(`feedback-${riddleId}`);
+    // Handle Answer Submission
+    document.querySelectorAll(".submit-btn").forEach(button => {
+      button.addEventListener("click", function () {
+        const riddleId = this.getAttribute("data-riddle-id");
+        const riddleCard = document.getElementById(`riddle-${riddleId}`);
+        const answerInput = riddleCard.querySelector('.answer-input');
+        const answer = answerInput.value.trim();
+        const feedbackElement = document.getElementById(`feedback-${riddleId}`);
   
-              if (!answer) {
-                  feedbackElement.textContent = "Please enter an answer.";
-                  return;
-              }
+        if (!answer) {
+          feedbackElement.textContent = "Please enter an answer.";
+          return;
+        }
   
-              fetch(`/submit_answer/${riddleId}`, {
-                  method: "POST",
-                  headers: {
-                      "Content-Type": "application/json",
-                  },
-                  body: JSON.stringify({ answer: answer })
-              })
-              .then(response => {
-                  if (!response.ok) {
-                      throw new Error(`Answer submission failed: ${response.status}`);
-                  }
-                  return response.json();
-              })
-              .then(data => {
-                  if (data.correct) {
-                      // Success handling
-                      const riddleCard = document.getElementById(`riddle-${riddleId}`);
-                      riddleCard.querySelector('.answer-container').style.display = 'none';
-                      riddleCard.querySelector('.hints-container').style.display = 'none';
-                      riddleCard.querySelector('.success-message').style.display = 'block';
-                      
-                      const badge = riddleCard.querySelector('.badge');
-                      badge.classList.remove('bg-primary');
-                      badge.classList.add('bg-success');
-                      badge.textContent = 'Completed';
-                  } else {
-                      feedbackElement.textContent = "Incorrect answer. Try again!";
-                      setTimeout(() => { feedbackElement.textContent = ''; }, 3000);
-                  }
-              })
-              .catch(error => {
-                  console.error("Answer submission error:", error);
-                  alert("Failed to submit answer. Please try again.");
-              });
-          });
+        fetch(`/submit_answer_without_images/${riddleId}`, {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+          },
+          body: JSON.stringify({ answer: answer })
+        })
+        .then(response => {
+          if (!response.ok) {
+            throw new Error(`Answer submission failed: ${response.status}`);
+          }
+          return response.json();
+        })
+        .then(data => {
+          if (data.correct) {
+            // Success handling
+            const answerContainer = riddleCard.querySelector('.answer-container');
+            const hintsContainer = riddleCard.querySelector('.hints-container');
+            const successMessage = riddleCard.querySelector('.success-message');
+            const badge = riddleCard.querySelector('.badge');
+            const earnedPointsSpan = successMessage.querySelector('.earned-points');
+  
+            // Hide answer and hints containers
+            if (answerContainer) answerContainer.style.display = 'none';
+            if (hintsContainer) hintsContainer.style.display = 'none';
+  
+            // Show success message with correct score
+            if (successMessage) successMessage.style.display = 'block';
+            
+            // Update earned points
+            if (earnedPointsSpan) {
+              earnedPointsSpan.textContent = data.final_score;
+            }
+  
+            // Update badge
+            if (badge) {
+              badge.classList.remove('bg-primary');
+              badge.classList.add('bg-success');
+              badge.textContent = 'Completed';
+            }
+          } else {
+            feedbackElement.textContent = "Incorrect answer. Try again!";
+            setTimeout(() => { feedbackElement.textContent = ''; }, 3000);
+          }
+        })
+        .catch(error => {
+          console.error("Answer submission error:", error);
+          alert("Failed to submit answer. Please try again.");
+        });
       });
+    });
   
-      // Enter key submission
-      document.querySelectorAll(".answer-input").forEach(input => {
-          input.addEventListener("keypress", function (e) {
-              if (e.key === "Enter") {
-                  const submitBtn = this.closest('.answer-container').querySelector('.submit-btn');
-                  submitBtn.click();
-              }
-          });
+    // Enter key submission
+    document.querySelectorAll(".answer-input").forEach(input => {
+      input.addEventListener("keypress", function (e) {
+        if (e.key === "Enter") {
+          const submitBtn = this.closest('.answer-container').querySelector('.submit-btn');
+          submitBtn.click();
+        }
       });
+    });
   });
   </script>
 {% endblock %} {% block styles %}
