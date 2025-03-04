@@ -2,6 +2,7 @@
 from flask import Flask, render_template, request, redirect, url_for, session, flash, jsonify
 import sqlite3
 import os
+import time
 from datetime import datetime
 import json
 import secrets
@@ -14,6 +15,49 @@ app.secret_key = secrets.token_hex(16)
 app.config['UPLOAD_FOLDER'] = 'static/uploads'
 os.makedirs(app.config['UPLOAD_FOLDER'], exist_ok=True)
 
+def modify_riddles_table():
+    conn = sqlite3.connect('riddle_test.db')
+    c = conn.cursor()
+    
+    # Create a new table for riddle variants
+    c.execute('''
+        CREATE TABLE IF NOT EXISTS riddle_variants (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            riddle_id INTEGER NOT NULL,
+            question_variant TEXT NOT NULL,
+            FOREIGN KEY (riddle_id) REFERENCES riddles (id)
+        )
+    ''')
+    
+    conn.commit()
+    conn.close()
+    print("Added riddle_variants table for multiple question variants")
+
+# Run this once to add the new table
+modify_riddles_table()
+
+def add_user_question_variants_table():
+    conn = sqlite3.connect('riddle_test.db')
+    c = conn.cursor()
+    
+    # Create a table to track which variant is assigned to each user
+    c.execute('''
+        CREATE TABLE IF NOT EXISTS user_question_variants (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+    user_id INTEGER NOT NULL,
+    riddle_id INTEGER NOT NULL,
+    question_variant TEXT NOT NULL,
+    FOREIGN KEY (user_id) REFERENCES users(id),
+    FOREIGN KEY (riddle_id) REFERENCES riddles(id)
+);
+    ''')
+    
+    conn.commit()
+    conn.close()
+    print("Added user_question_variants table to track user's assigned questions")
+
+# Run this once to set up the variant tracking
+add_user_question_variants_table()
 
 def init_db():
     conn = sqlite3.connect('riddle_test.db')
@@ -286,61 +330,99 @@ def test():
     # This will now be the redirect to the first page (without images)
     return redirect(url_for('test_without_images'))
 
-@app.route('/test_without_images') 
-def test_without_images(): 
-    if 'user_id' not in session: 
-        flash('Please log in to take the test.') 
-        return redirect(url_for('login')) 
-     
-    # Check if user has already completed the test
-    if has_completed_test(session['user_id']):
-        flash('You have already completed this test. You cannot take it again.')
-        return redirect(url_for('results'))
+@app.route('/test_without_images')
+def test_without_images():
+    if 'user_id' not in session:
+        flash('Please log in to take the test.')
+        return redirect(url_for('login'))
     
-    conn = sqlite3.connect('riddle_test.db') 
-    c = conn.cursor() 
-     
-    # Check if the user has been flagged for cheating 
-    c.execute(''' 
-        SELECT COUNT(*)  
-        FROM user_progress  
-        WHERE user_id = ? AND answer_attempt = "FLAGGED-TAB-SWITCHING" 
-    ''', (session['user_id'],)) 
-     
-    flag_count = c.fetchone()[0] 
-     
-    # If flagged, redirect to results 
-    if flag_count > 0: 
-        conn.close() 
-        flash('You have been flagged for tab switching. Test access is restricted.') 
-        return redirect(url_for('results')) 
-     
-    # Get all riddles WITHOUT images with user progress 
-    c.execute(''' 
-        SELECT r.id, r.question, r.image, up.score, up.completed, up.hint1_used, up.hint2_used, up.hint3_used 
-        FROM riddles r 
-        LEFT JOIN user_progress up ON r.id = up.riddle_id AND up.user_id = ? 
-        WHERE r.image IS NULL OR r.image = ""
-        ORDER BY r.id 
-    ''', (session['user_id'],)) 
-     
-    riddle_data = c.fetchall() 
-    conn.close() 
-     
-    riddles_without_images = [] 
-    for riddle in riddle_data: 
-        riddles_without_images.append({ 
-            'id': riddle[0], 
-            'question': riddle[1], 
-            'image': riddle[2], 
-            'score': riddle[3], 
-            'completed': riddle[4], 
-            'hint1_used': riddle[5], 
-            'hint2_used': riddle[6], 
-            'hint3_used': riddle[7], 
-        }) 
-     
-    return render_template('test.html', riddles_without_images=riddles_without_images)
+    conn = sqlite3.connect('riddle_test.db')
+    conn.row_factory = sqlite3.Row  
+    c = conn.cursor()
+    
+    try:
+        # Fetch user progress
+        c.execute('''
+            SELECT up.riddle_id, r.question, r.answer, r.hint1, r.hint2, r.hint3, 
+                   up.hint1_used, up.hint2_used, up.hint3_used, up.completed
+            FROM user_progress up
+            JOIN riddles r ON up.riddle_id = r.id
+            WHERE up.user_id = ? AND up.completed = 0
+            ORDER BY up.riddle_id
+        ''', (session['user_id'],))
+
+        incomplete_riddles = c.fetchall()
+        
+        # Debugging: Print fetched riddles
+        print(f"Fetched riddles for user {session['user_id']}: {incomplete_riddles}")
+
+        if not incomplete_riddles:
+            return redirect(url_for('results'))
+        
+        riddles_with_variants = []
+        
+        for riddle in incomplete_riddles:
+            riddle_id = riddle['riddle_id']
+            
+            # Fetch variants
+            c.execute('''
+                SELECT question_variant FROM riddle_variants WHERE riddle_id = ?
+            ''', (riddle_id,))
+            
+            variants = [row['question_variant'] for row in c.fetchall()]
+            
+            # Debugging: Print variants
+            print(f"Variants for riddle {riddle_id}: {variants}")
+
+            # Include primary question as an option
+            all_questions = variants + [riddle['question']]
+            
+            session_key = f"riddle_{session['user_id']}_{riddle_id}"
+            if session_key not in session:
+                session[session_key] = random.choice(all_questions)  # Store choice
+            
+            question_text = session[session_key]  
+
+            # Debugging: Print selected question
+            print(f"Selected question for riddle {riddle_id}: {question_text}")
+
+            # Store riddle data
+            riddle_data = dict(riddle)
+            riddle_data['display_question'] = question_text
+            riddles_with_variants.append(riddle_data)
+        
+        # Ensure index is valid
+        session.setdefault('current_riddle_index', 0)
+        current_index = session['current_riddle_index']
+        
+        if current_index >= len(riddles_with_variants):
+            session['current_riddle_index'] = 0
+            current_index = 0
+        
+        current_riddle = riddles_with_variants[current_index]
+
+        if 'page_loaded_at' not in session:
+            session['page_loaded_at'] = time.time()
+        
+        return render_template(
+    'test.html',
+    riddles_without_images=riddles_with_variants,  # Use the correct variable name
+    riddle_number=current_index + 1,
+    total_riddles=len(riddles_with_variants),
+    hint1_used=current_riddle['hint1_used'],
+    hint2_used=current_riddle['hint2_used'],
+    hint3_used=current_riddle['hint3_used']
+)
+
+        
+    except Exception as e:
+        print(f"Error in test_without_images: {str(e)}")
+        flash('An error occurred while loading the test. Please try again.')
+        return redirect(url_for('admin_dashboard'))
+    
+    finally:
+        conn.close()
+
 
 @app.route('/test_with_images') 
 def test_with_images(): 
@@ -658,55 +740,135 @@ def admin_dashboard():
 def add_riddle():
     if 'user_id' not in session or not session.get('is_admin'):
         return jsonify({'error': 'Unauthorized'}), 401
-    
-    question = request.form.get('question')
+   
+    # Get main riddle data
+    primary_question = request.form.get('question')
     answer = request.form.get('answer')
     hint1 = request.form.get('hint1')
     hint2 = request.form.get('hint2')
     hint3 = request.form.get('hint3')
     image = request.files.get('image')  # Get image from request
-
-    if not all([question, answer, hint1, hint2, hint3]):
+   
+    # Get question variants (if any)
+    variant_questions = request.form.getlist('question_variants[]')  # Assuming you'll send variants as an array
+    
+    if not all([primary_question, answer, hint1, hint2, hint3]):
         return jsonify({'error': 'All fields are required'}), 400
-
+        
     image_filename = None
-    if image:
+    if image and image.filename:
         image_filename = secure_filename(image.filename)
         image.save(os.path.join(app.config['UPLOAD_FOLDER'], image_filename))
-
+        
     conn = sqlite3.connect('riddle_test.db')
     c = conn.cursor()
-
     try:
-        # Add new riddle with image support
+        # Add new riddle with image support (primary question stored in main table)
         c.execute('''
             INSERT INTO riddles (question, answer, hint1, hint2, hint3, image)
             VALUES (?, ?, ?, ?, ?, ?)
-        ''', (question, answer, hint1, hint2, hint3, image_filename))
-        
+        ''', (primary_question, answer, hint1, hint2, hint3, image_filename))
+       
         riddle_id = c.lastrowid
-
+       
+        # Insert any additional question variants
+        for variant in variant_questions:
+            if variant.strip():  # Only add non-empty variants
+                c.execute('''
+                    INSERT INTO riddle_variants (riddle_id, question_variant)
+                    VALUES (?, ?)
+                ''', (riddle_id, variant.strip()))
+                
         # Initialize progress for all users
         c.execute("SELECT id FROM users WHERE is_admin = 0")
         user_ids = c.fetchall()
-
         for user_id in user_ids:
             c.execute("INSERT INTO user_progress (user_id, riddle_id) VALUES (?, ?)",
                      (user_id[0], riddle_id))
-        
+       
         conn.commit()
-
         return jsonify({
             'success': True,
             'riddle_id': riddle_id,
-            'image_url': f"/static/uploads/{image_filename}" if image_filename else None
+            'image_url': f"/static/uploads/{image_filename}" if image_filename else None,
+            'variant_count': len(variant_questions)
         })
     except Exception as e:
         return jsonify({'error': str(e)}), 500
     finally:
         conn.close()
 
+@app.route('/admin/get_riddle_variants/<int:riddle_id>', methods=['GET'])
+def get_riddle_variants(riddle_id):
+    if 'user_id' not in session or not session.get('is_admin'):
+        return jsonify({'error': 'Unauthorized'}), 401
+        
+    conn = sqlite3.connect('riddle_test.db')
+    conn.row_factory = sqlite3.Row
+    c = conn.cursor()
+    
+    try:
+        # Get the primary question
+        c.execute("SELECT question FROM riddles WHERE id = ?", (riddle_id,))
+        riddle = c.fetchone()
+        
+        if not riddle:
+            return jsonify({'error': 'Riddle not found'}), 404
+            
+        primary_question = riddle['question']
+        
+        # Get all variants
+        c.execute("SELECT id, question_variant as text FROM riddle_variants WHERE riddle_id = ?", 
+                  (riddle_id,))
+        variants = [dict(row) for row in c.fetchall()]
+        
+        return jsonify({
+            'primary_question': primary_question,
+            'variants': variants
+        })
+    except Exception as e:
+        return jsonify({'error': str(e)}), 500
+    finally:
+        conn.close()
 
+@app.route('/admin/add_riddle_variant', methods=['POST'])
+def add_riddle_variant():
+    if 'user_id' not in session or not session.get('is_admin'):
+        return jsonify({'error': 'Unauthorized'}), 401
+        
+    data = request.json
+    riddle_id = data.get('riddle_id')
+    question_variant = data.get('question_variant')
+    
+    if not riddle_id or not question_variant:
+        return jsonify({'error': 'Missing required fields'}), 400
+        
+    conn = sqlite3.connect('riddle_test.db')
+    c = conn.cursor()
+    
+    try:
+        # Check if riddle exists
+        c.execute("SELECT id FROM riddles WHERE id = ?", (riddle_id,))
+        if not c.fetchone():
+            return jsonify({'error': 'Riddle not found'}), 404
+            
+        # Insert the new variant
+        c.execute('''
+            INSERT INTO riddle_variants (riddle_id, question_variant)
+            VALUES (?, ?)
+        ''', (riddle_id, question_variant))
+        
+        variant_id = c.lastrowid
+        conn.commit()
+        
+        return jsonify({
+            'success': True,
+            'variant_id': variant_id
+        })
+    except Exception as e:
+        return jsonify({'error': str(e)}), 500
+    finally:
+        conn.close()
 
 
 @app.route('/admin/delete_riddle/<int:riddle_id>', methods=['POST'])

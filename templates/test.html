@@ -2,7 +2,7 @@
 {% extends 'base.html' %} {% block content %}
 <h2 class="mb-4">Riddle Test</h2>
 
-<!-- <div class="alert alert-warning" id="tab-warning" style="display: none">
+<div class="alert alert-warning" id="tab-warning" style="display: none">
   <strong>Warning:</strong>
   <span id="warning-text"
     >Switching tabs during the test is not allowed. This is warning #<span
@@ -10,7 +10,7 @@
       >1</span
     >. After 3 warnings, your test will be automatically submitted.</span
   >
-</div> -->
+</div>
 
 <div class="row riddle-container">
   {% for riddle in riddles_without_images %}
@@ -28,7 +28,7 @@
         </span>
       </div>
       <div class="card-body">
-        <p class="riddle-question">{{ riddle.question }}</p>
+        <p class="riddle-question">{{ riddle.display_question }}</p>
 
         <div
           class="hints-container mb-3"
