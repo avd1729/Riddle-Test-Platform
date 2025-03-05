@@ -99,6 +99,9 @@ def init_db():
     conn = sqlite3.connect('riddle_test.db')
     c = conn.cursor()
     
+    # remove user data
+    # c.execute('DELETE FROM users') 
+
     # Users table
     c.execute('''
         CREATE TABLE IF NOT EXISTS users (
